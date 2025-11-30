@@ -1,3 +1,4 @@
+﻿using System.ComponentModel.DataAnnotations;
 using FIAP.Games.CatalogAPI.Dtos;
 using FIAP.Games.CatalogAPI.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +8,6 @@ namespace FIAP.Games.CatalogAPI.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public class GamesController : ControllerBase
 {
     private readonly IGameService _gameService;
@@ -16,27 +16,51 @@ public class GamesController : ControllerBase
     {
         _gameService = gameService;
     }
-
+    /// <summary>
+    /// Obtém todos os jogos com filtros opcionais
+    /// </summary>
     [HttpGet]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<IEnumerable<GameResponseDto>>> GetAsync([FromQuery] string? search, [FromQuery] string? genre, CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<GameResponseDto>>> GetAsync(
+        [FromQuery] string? search,
+        [FromQuery] string? genre,
+        CancellationToken cancellationToken)
     {
         var games = await _gameService.GetAsync(search, genre, cancellationToken);
         return Ok(games);
     }
 
+    [HttpGet("search")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<IEnumerable<GameResponseDto>>> SearchByTitleAsync(
+        [FromQuery][Required] string title,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return BadRequest("O título é obrigatório para realizar a pesquisa.");
+        }
+
+        var games = await _gameService.SearchByTitleAsync(title, cancellationToken);
+        return Ok(games);
+    }
+
     [HttpGet("{id:guid}")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GameResponseDto>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
     {
         var game = await _gameService.GetByIdAsync(id, cancellationToken);
         return game is null ? NotFound() : Ok(game);
     }
 
+   
     [HttpPost]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -47,6 +71,7 @@ public class GamesController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -58,6 +83,7 @@ public class GamesController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -1,0 +1,38 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fiap-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: /bin/bash -c '/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "${DB_PASSWORD}" -Q "SELECT 1"'
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  catalogapi:
+    build:
+      context: .
+      dockerfile: FIAP.Games.CatalogAPI/Dockerfile
+    container_name: fiap-games-catalog
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_HTTP_PORTS=8080
+      - ConnectionStrings__Catalog=Server=sqlserver;Database=Fiap.Games.Catalog;User Id=sa;Password=${DB_PASSWORD};TrustServerCertificate=True
+      - Authentication__Authority=${AUTH_AUTHORITY}
+      - Authentication__Audience=${AUTH_AUDIENCE}
+      - Authentication__RequireHttpsMetadata=${AUTH_REQUIRE_HTTPS}
+    ports:
+      - "5180:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+volumes:
+  sqldata:

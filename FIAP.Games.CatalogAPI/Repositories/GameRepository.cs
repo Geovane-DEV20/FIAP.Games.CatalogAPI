@@ -62,6 +62,21 @@ public class GameRepository : IGameRepository
         return await _context.Games.AsNoTracking().FirstOrDefaultAsync(game => game.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<Game>> SearchByTitleAsync(string title, CancellationToken cancellationToken)
+    {
+        var normalized = title.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return Array.Empty<Game>();
+        }
+
+        return await _context.Games
+            .AsNoTracking()
+            .Where(game => EF.Functions.Like(game.Title, $"%{normalized}%"))
+            .OrderBy(game => game.Title)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task UpdateAsync(Game game, CancellationToken cancellationToken)
     {
         _context.Games.Update(game);

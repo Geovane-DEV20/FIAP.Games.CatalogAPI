@@ -37,6 +37,12 @@ public class GameService : IGameService
         return game?.ToResponseDto();
     }
 
+    public async Task<IReadOnlyCollection<GameResponseDto>> SearchByTitleAsync(string title, CancellationToken cancellationToken)
+    {
+        var games = await _repository.SearchByTitleAsync(title, cancellationToken);
+        return games.Select(game => game.ToResponseDto()).ToList();
+    }
+
     public async Task<bool> UpdateAsync(Guid id, GameUpdateDto dto, CancellationToken cancellationToken)
     {
         var existing = await _repository.GetByIdAsync(id, cancellationToken);

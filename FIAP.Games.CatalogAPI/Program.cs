@@ -3,11 +3,11 @@ using FIAP.Games.CatalogAPI.Repositories;
 using FIAP.Games.CatalogAPI.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -15,12 +15,37 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddDbContext<CatalogDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Catalog")));
 
+// ✅ Autenticação JWT Simplificada
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Authentication:Authority"];
-        options.Audience = builder.Configuration["Authentication:Audience"];
-        options.RequireHttpsMetadata = builder.Configuration.GetValue<bool?>("Authentication:RequireHttpsMetadata") ?? true;
+        var jwtSettings = builder.Configuration.GetSection("Jwt");
+        var secretKey = jwtSettings["Key"]!;
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+
+            ValidIssuer = jwtSettings["Issuer"],
+            ValidAudience = jwtSettings["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey)),
+
+            ClockSkew = TimeSpan.Zero // Remove tolerância de 5 minutos padrão
+        };
+
+        // ✅ Logs para depuração
+        options.Events = new JwtBearerEvents
+        {
+            OnAuthenticationFailed = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogWarning("Falha na autenticação: {Error}", context.Exception.Message);
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -34,20 +59,20 @@ builder.Services.AddSwaggerGen(options =>
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "FIAP.Games.CatalogAPI",
-        Version = "v1"
+        Version = "v1",
+        Description = "API de catálogo de jogos da FIAP"
     });
 
-    var securityScheme = new OpenApiSecurityScheme
+    // ✅ Configuração de autenticação no Swagger
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Description = "Informe o token JWT emitido pelo microsserviço de autenticação usando o esquema Bearer.",
+        Description = "Token JWT no formato: Bearer {seu_token}",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT"
-    };
-
-    options.AddSecurityDefinition("Bearer", securityScheme);
+    });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
@@ -67,7 +92,6 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -76,11 +100,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// ✅ Ordem importante: Authentication antes de Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
+// Seed do banco
 using (var scope = app.Services.CreateScope())
 {
     var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
